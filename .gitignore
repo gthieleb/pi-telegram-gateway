@@ -5,6 +5,8 @@ config.json
 auth.json
 *.session
 .env
+**/voice.env
+!**/voice.env.example
 
 node_modules/
 dist/

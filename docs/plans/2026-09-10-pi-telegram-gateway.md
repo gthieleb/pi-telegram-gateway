@@ -1659,6 +1659,137 @@ EOF
 
 ---
 
+## Phase 10 (v2): Voice Chat — same bot, native dual-stack
+
+> Basiert auf `~/projects/pilemma-voicebot/` (bewiesener Dual-Stack), aber der
+> Command-Kanal ist der Gateway (einziger `getUpdates`-Poller); der Voice-Worker
+> läuft **ohne** Bot-API-Updates (`no_updates=True`) und wird per IPC gesteuert.
+
+### Task 11.1: Voice IPC protocol + command parser (TDD)
+
+**Files:**
+- Create: `src/voice.ts`
+- Test: `tests/voice.test.ts`
+
+**Step 1: Failing test**
+
+```typescript
+// tests/voice.test.ts
+import { describe, expect, it } from "vitest";
+import { isVoiceCommand, voiceIpcMessage, parseVoiceEvent } from "../src/voice.js";
+
+describe("voice", () => {
+  it("recognizes voice commands", () => {
+    expect(isVoiceCommand("!play https://x")).toMatchObject({ cmd: "play", url: "https://x" });
+    expect(isVoiceCommand("!volume 150")).toMatchObject({ cmd: "volume", args: "150" });
+    expect(isVoiceCommand("!vstatus")).toMatchObject({ cmd: "status" });
+    expect(isVoiceCommand("hello")).toBeNull();
+  });
+  it("encodes IPC request / parses events", () => {
+    expect(voiceIpcMessage({ cmd: "play", chat: -100, url: "x" })).toBe(
+      '{"cmd":"play","chat":-100,"url":"x"}\n');
+    expect(parseVoiceEvent('{"event":"state","playing":true}')).toMatchObject({ event: "state" });
+    expect(parseVoiceEvent("garbage")).toBeNull();
+  });
+});
+```
+
+**Step 2: Run** — FAIL. **Step 3: Implement `src/voice.ts`**
+
+```typescript
+// src/voice.ts
+export interface VoiceCommand {
+  cmd: "play" | "pause" | "resume" | "stop" | "volume" | "status";
+  args?: string; url?: string;
+}
+export interface VoiceEvent { event: string; [k: string]: unknown }
+
+const VOICE_RE = /^!(play|pause|resume|stop|volume|vstatus)(?:\s+([\s\S]+))?$/i;
+
+export function isVoiceCommand(text: string): VoiceCommand | null {
+  const m = VOICE_RE.exec(text.trim());
+  if (!m) return null;
+  const raw = m[1].toLowerCase();
+  const cmd = (raw === "vstatus" ? "status" : raw) as VoiceCommand["cmd"];
+  const args = (m[2] ?? "").trim();
+  return cmd === "play" ? { cmd, url: args, args } : { cmd, args };
+}
+
+export function voiceIpcMessage(msg: Record<string, unknown>): string {
+  return JSON.stringify(msg) + "\n";
+}
+
+export function parseVoiceEvent(line: string): VoiceEvent | null {
+  try { return JSON.parse(line) as VoiceEvent; } catch { return null; }
+}
+```
+
+**Step 4: Run** — PASS. **Step 5: Commit** `feat(voice): command parser + ipc protocol`
+
+### Task 11.2: Voice sidecar (Python, reuse voicebot core)
+
+**Files:**
+- Create: `voice/worker.py` — JSON-lines loop: stdin cmd → PyTgCalls call → stdout event; Pyrogram `no_updates=True`; idle-exit timer
+- Create: `voice/requirements.txt` — `pyrofork`, `py-tgcalls`
+- Create: `voice/README.md` — setup + reuse notes from `~/projects/pilemma-voicebot/bot.py`
+
+**Step 1:** Port voice core from `~/projects/pilemma-voicebot/bot.py` (join/play/pause/resume/leave/volume) into `voice/worker.py` using the Task 11.1 IPC; keep `no_updates=True`; idle-exit timer (default 10 min).
+**Step 2:** Manual verify: `echo '{"cmd":"play","url":"…","chat":-100}' | python3 voice/worker.py` with `voice.env` → joins voice chat, emits state events on stdout.
+**Step 3: Commit** `feat(voice): python sidecar worker (pyrogram+pytgcalls, no bot-api updates)`
+
+### Task 11.3: Gateway voice integration (TDD)
+
+**Files:**
+- Create: `src/voice-control.ts` — spawn sidecar on first command, JSON-lines IPC, idle exit, events → outbound messages
+- Modify: `src/gateway.ts` — route `isVoiceCommand(text)` **before** lane dispatch; unknown `!cmd` from non-voice config → ignore
+- Modify: `src/config.ts` — `voice?: { enabled: boolean; idleExitMinutes?: number; workerPath?: string; pythonBin?: string }`
+- Test: `tests/voice-control.test.ts` — fake child process (EventEmitter) injected
+
+**Step 1: Failing test** — `!play <url>` → child spawned with cmd; `state` event → sendMessage to origin topic; idle timeout → child killed; `!status` while child dead → „voice offline“.
+**Step 2: Run** — FAIL. **Step 3: Implement.** **Step 4: Run** — PASS.
+**Step 5: Commit** `feat(voice): sidecar lifecycle + voice command routing`
+
+### Task 11.4: `/voice` inline menu
+
+- Inline keyboard: ▶️ Play / ⏸ Pause / ⏹ Stop / 🔊 Volume ± / 📊 Status → voice commands for that chat (needs Task 12.2 callback handling).
+- **Commit:** `feat(voice): inline voice control menu`
+
+---
+
+## Phase 11 (v2): Telegram Keyboard & Menus
+
+### Task 12.1: Bot command menu sync (TDD)
+
+**Files:**
+- Modify: `src/telegram.ts` — `setMyCommands(commands: {command,description}[])`
+- Test: `tests/telegram.menu.test.ts`
+
+**Step 1: Failing test** — menu posts `/new /status /model /voice /help` once at leader start.
+**Step 2–4:** Implement + PASS. **Step 5: Commit** `feat(menu): sync bot command menu at leader start`
+
+### Task 12.2: Inline keyboard /model + /new confirm (TDD)
+
+**Files:**
+- Create: `src/keyboard.ts` — markup builders + callback-data codec
+- Modify: `src/telegram.ts` — `sendMessage` gains `reply_markup`; add `answerCallbackQuery`, `editMessageText`; `allowed_updates: ["message", "callback_query"]`
+- Modify: `src/gateway.ts` — handle `callback_query` updates (route by `message.message_thread_id`)
+- Test: `tests/keyboard.test.ts`
+
+**Key behavior:**
+- `/model` → inline keyboard, callback_data `gw:model:<provider>/<id>` (≤8/page, Prev/Next)
+- callback → `answerCallbackQuery`, lane `setModel`, feedback message
+- `/new` → `gw:confirm:new:<key>` → ✅ resets lane, ❌ answers only; expired callbacks → `answerCallbackQuery("expired")`
+- **Commit:** `feat(keyboard): inline model picker + confirm reset`
+
+### Task 12.3: Typing pulses + quoted-message context (TDD)
+
+- Pulse: `setInterval` 4 s `sendChatAction` while lane busy; cleared on reply.
+- Quote: user reply → prefix `> ${quote.slice(0, 500)}` + blank line + text.
+- Tests: `tests/typing.test.ts`, `tests/quote.test.ts`.
+- **Commit:** `feat(ux): typing pulses + quoted context`
+
+---
+
 ## Definition of Done (v1)
 
 - [ ] `npm test` green (config, lock, gate, chunk, telegram, lane, router, gateway suites)
@@ -1667,3 +1798,12 @@ EOF
 - [ ] Live: answer in foreign topic (not 1655) reaches a fresh lane and replies in-place
 - [ ] Mux removed from settings; no 409 conflicts
 - [ ] No secrets in git history
+
+## Definition of Done (v2 additions)
+
+- [ ] `!play <url>` in any topic → bot joins that group's voice chat and streams; `!stop` leaves
+- [ ] Sidecar never calls `getUpdates` (no conflict); idle-exit after 10 min
+- [ ] Bot menu shows `/new /status /model /voice /help` in the Telegram client
+- [ ] `/model` inline picker switches the lane's model; `/new` requires ✅ confirm
+- [ ] Quoted replies include context; typing pulses during turns
+- [ ] `voice.env` (API_ID/API_HASH/BOT_TOKEN) gitignored, only `.example` committed

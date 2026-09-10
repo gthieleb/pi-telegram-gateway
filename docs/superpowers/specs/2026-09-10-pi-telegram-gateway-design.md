@@ -144,9 +144,56 @@ member/admin of — no per-topic binding table. Gating is user-allowlist based.
 5. Document the swap in `pi-agent-setup` repo (README table + note).
    ⚠️ After step 3 the mux topic 1655 channel is gone by design.
 
+## Additions (2026-09-10, user-approved): Voice Chat (v2)
+
+**Ziel:** Voice-Chat-Steuerung (wie `~/projects/pilemma-voicebot/`) — aber
+**nativ über denselben Bot** (`@PiLemmaBot`), kein zweiter Bot-Account.
+
+Grundlage: der Dual-Stack aus dem Voicebot-Concept ist mit Bot-Accounts
+bewiesen: Bot-API `getUpdates` für Commands + MTProto (Pyrogram,
+`no_updates=True`) + PyTgCalls/ntgcalls für `phone.JoinGroupCall`. MTProto
+liefert bei Bot-Accounts keine Message-Updates — der Gateway bleibt also der
+*einzige* Bot-API-Poller (kein 409-Conflict), der Voice-Worker bekommt
+*keine* Updates selbst.
+
+```
+gateway (Node, pi extension) ── Bot API getUpdates (exklusiv)
+        │ !play / !pause / !resume / !stop / !volume / !vstatus
+        │ (+ /voice Inline-Menü)
+        ▼  JSON-Lines IPC (stdin/stdout)
+voice sidecar (Python, lazy spawned)
+  · Pyrogram bot-token login (API_ID/API_HASH), no_updates=True
+  · PyTgCalls: join / play / pause / resume / leave / volume
+  · Events → Gateway → sendMessage in das Ursprungs-Topic
+```
+
+| Punkt | Entscheidung |
+|---|---|
+| Polling | Gateway exklusiv; Sidecar hat `no_updates=True` und ruft **nie** `getUpdates` auf |
+| Sidecar | Thin Python-Worker (Wiederverwendung der pilemma-voicebot-Voice-Core-Logik), Spawn on first voice command, Idle-Exit nach 10 min, Kill bei `session_shutdown` |
+| IPC | JSON-Lines auf stdin/stdout: `{"cmd":"play","chat":-100,"url":…}` / `{"event":"state","playing":true,"position":12}` |
+| Secrets | `voice.env` in `~/.pi/agent/pi-telegram-gateway/` (API_ID, API_HASH, BOT_TOKEN) — gitignored, nur `.example` committed |
+| Config | `voice: { enabled, idleExitMinutes }` + Pfad zum Python-Worker |
+| Bestehender Voicebot | `pilemma-voicebot.service` (@PiLemmaVoiceBot) läuft unverändert weiter — Migration/Einstellung = Nutzerentscheidung beim Switchover |
+
+## Additions (2026-09-10, user-approved): Telegram Keyboard & Menus (v2)
+
+Übernommen aus `pi-telegram-plus` (angepasst an Gateway-Architektur):
+
+| Feature | Umsetzung |
+|---|---|
+| **Bot-Menü-Sync** | `setMyCommands` beim Leader-Start: `/new`, `/status`, `/model`, `/voice`, `/help` (unter_score-Regeln der Bot-API beachtet) |
+| **Inline `/model`** | Model-Picker aus `ModelRuntime`-Registry (Default zuerst, Pagination); `callback_query` → `answerCallbackQuery` → `session.setModel()` der Lane + Feedback-Message |
+| **Inline `/new`-Confirm** | ✅ Reset / ❌ Abbrechen Buttons, `callback_data: gw:confirm:new:<key>` — verhindert versehentliches Zurücksetzen |
+| **Callback-Routing** | `allowed_updates: ["message", "callback_query"]`; Callback-Keys laufen über `message.message_thread_id` in die Lane |
+| **Typing-Pulse** | `sendChatAction` alle 4 s während die Lane streamt (statt einmalig) |
+| **Quoted-Message-Kontext** | Reply auf eine Nachricht → Zitat-Text/Caption (gekürzt auf ~500 Zeichen) als `> Zitat: …`-Prefix in den Prompt |
+
 ## Non-goals (v1)
-- Multi-bot profiles, followers-IPC fan-out, TTS/STT, inline buttons, cron,
-  memory, media/albums, channel posts, `direct_messages_topic_id` handling.
+- Multi-bot profiles, followers-IPC fan-out, TTS/STT, memory, albums,
+  channel posts, `direct_messages_topic_id` handling. (Voice chat +
+  keyboards/menus sind als **v2-Phasen** in denselben Plan aufgenommen —
+  siehe Additions; sie kommen nach dem funktionierenden v1-Kern.)
 
 ## Future
 - Voice notes (Whisper STT), image input (mux v1.3-style paths), steering of
