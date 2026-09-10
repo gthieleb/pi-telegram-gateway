@@ -2,7 +2,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { getAgentDir, ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { configPaths, loadConfig, type GatewayConfig } from "./config.js";
-import { claimLock, releaseLock, type LockHandle } from "./lock.js";
+import { claimLock, readLock, releaseLock, type LockHandle } from "./lock.js";
 import { Gateway } from "./gateway.js";
 import { Router } from "./router.js";
 import { TelegramClient } from "./telegram.js";
@@ -119,6 +119,16 @@ export async function startGateway(
   };
 
   const sweep = setInterval(() => {
+    // mode takeover: if a daemon claimed the lock, extension host must stop polling
+    if (hostType === "extension") {
+      const current = readLock(paths.lockFile);
+      if (current && current.capability.startsWith("daemon:")) {
+        log("daemon took over lock — stopping extension gateway");
+        sink.setStatus("tg-gw", `daemon (pid ${current.pid})`);
+        gw.stop();
+        return;
+      }
+    }
     router.sweepIdle();
     writeStatus();
   }, 30_000);

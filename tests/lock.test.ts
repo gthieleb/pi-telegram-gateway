@@ -53,4 +53,22 @@ describe("leader lock", () => {
     releaseLock(file, res);
     expect(readLock(file)).toBeNull();
   });
+
+  it("daemon beats live extension leader (takeover)", () => {
+    const file = join(tmp(), "leader.json");
+    const ext = claimLock(file, { capability: "extension:111", hostType: "extension" });
+    expect(ext.leader).toBe(true);
+    const daemon = claimLock(file, { capability: "daemon:222", hostType: "daemon" });
+    expect(daemon.leader).toBe(true);
+    expect(readLock(file)?.capability).toBe("daemon:222");
+  });
+
+  it("extension does not steal live daemon lock", () => {
+    const file = join(tmp(), "leader.json");
+    const daemon = claimLock(file, { capability: "daemon:111", hostType: "daemon" });
+    expect(daemon.leader).toBe(true);
+    const ext = claimLock(file, { capability: "extension:222", hostType: "extension" });
+    expect(ext.leader).toBe(false);
+    expect(ext.lock?.capability).toBe("daemon:111");
+  });
 });

@@ -61,7 +61,7 @@ export function readLock(path: string): LeaderData | null {
 
 export function claimLock(
   path: string,
-  opts: { capability: string },
+  opts: { capability: string; hostType?: "daemon" | "extension" },
   identity: { name: string; startedAt: number } = selfIdentity(),
 ): { leader: boolean; lock?: LeaderData } {
   const existing = readLock(path);
@@ -70,7 +70,14 @@ export function claimLock(
     const identityMatches =
       existing.processIdentity.name === info.name && existing.processIdentity.startedAt === info.startedAt;
     const alive = info.alive && identityMatches;
-    if (alive) return { leader: false, lock: existing };
+    if (alive) {
+      // daemon host supersedes a live extension leader (mode toggle: daemon wins)
+      const existingIsExtension = existing.capability.startsWith("extension:");
+      if (existingIsExtension && opts.hostType === "daemon") {
+        return { leader: true, lock: undefined }; // takeover: extension sweep will notice
+      }
+      return { leader: false, lock: existing };
+    }
     // stale → reclaim below
   }
   const data: LeaderData = {
