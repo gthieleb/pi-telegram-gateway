@@ -94,6 +94,8 @@ export async function startGateway(
   const client = new TelegramClient(cfg.botToken);
   const username = cfg.botUsername ?? (await client.getMe()).username;
 
+  let gwRef: Gateway | null = null; // assigned after router; lanes only created via dispatch
+
   const router = new Router({
     createLane: async (key, resumeSessionFile) => {
       const [chatIdStr, threadPart] = key.split(":");
@@ -108,6 +110,12 @@ export async function startGateway(
           modelRuntime,
           resumeSessionFile,
           onReply: (text) => client.sendMessage(chatId, threadId, text),
+          onAskUser: (question, options) => {
+            if (!gwRef) throw new Error("gateway not ready");
+            const pending = gwRef.registerAskUser(key, chatId, threadId, question, options);
+            void client.sendMessage(chatId, threadId, question, undefined, pending.keyboard);
+            return pending.promise;
+          },
           log,
         }),
       );
@@ -125,8 +133,20 @@ export async function startGateway(
     },
   });
 
-  const gw = new Gateway({ config: cfg, client, router, pollDelayMs: 50, sweepIntervalMs: 30_000 });
+  const gw: Gateway = new Gateway({ config: cfg, client, router, pollDelayMs: 50, sweepIntervalMs: 30_000 });
+  gwRef = gw;
   gw.offset = offset;
+
+  try {
+    await client.setMyCommands([
+      { command: "new", description: "Lane zurücksetzen (frische Session)" },
+      { command: "attach", description: "Bestehende pi-Session anhängen" },
+      { command: "status", description: "Gateway-Status zeigen" },
+      { command: "help", description: "Kommando-Übersicht" },
+    ]);
+  } catch {
+    /* menu sync is best effort */
+  }
 
   const writeStatus = () =>
     writeRuntimeStatus(paths.statusFile, {

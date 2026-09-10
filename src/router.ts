@@ -74,6 +74,19 @@ export class Router {
     this.deps.clearBinding?.(key);
   }
 
+  /** Attach a session file to a lane: dispose old, set binding, eager-resume. */
+  async attachSession(key: string, sessionFile: string): Promise<void> {
+    const entry = this.lanes.get(key);
+    if (entry) {
+      entry.lane.dispose();
+      this.lanes.delete(key);
+    }
+    this.deps.clearBinding?.(key);
+    this.deps.saveBinding?.(key, sessionFile);
+    const lane = await this.deps.createLane(key, sessionFile);
+    this.lanes.set(key, { lane, lastUsed: (this.deps.now ?? Date.now)() });
+  }
+
   sweepIdle(): void {
     const now = (this.deps.now ?? Date.now)();
     for (const [key, entry] of this.lanes) {

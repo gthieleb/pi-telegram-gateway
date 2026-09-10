@@ -26,13 +26,22 @@ export class CallbackRegistry<T = unknown> {
   }
 
   register(value: T, ttlMs?: number): string {
+    const id = newMenuId();
     const ttl = this.opts.ttlMs ?? ttlMs ?? 300_000;
-    let id: string;
-    do {
-      id = Math.random().toString(16).slice(2, 2 + (this.opts.idLength ?? 6));
-    } while (this.entries.has(id));
     this.entries.set(id, { value, expiresAt: this.now() + ttl });
     return id;
+  }
+
+  /** Store under a deterministic key (e.g. `att:<id>`); overwrites existing. */
+  registerAt(key: string, value: T, ttlMs?: number): void {
+    const ttl = this.opts.ttlMs ?? ttlMs ?? 300_000;
+    this.entries.set(key, { value, expiresAt: this.now() + ttl });
+  }
+
+  peekAt(key: string): T | undefined {
+    const entry = this.entries.get(key);
+    if (!entry || entry.expiresAt < this.now()) return undefined;
+    return entry.value;
   }
 
   resolve(id: string): T | undefined {
@@ -55,4 +64,9 @@ export class CallbackRegistry<T = unknown> {
       if (entry.expiresAt < now) this.entries.delete(id);
     }
   }
+}
+
+/** 6-hex-char menu id (fits Telegram's 64-byte callback_data limit comfortably). */
+export function newMenuId(): string {
+  return Math.random().toString(16).slice(2, 8);
 }
