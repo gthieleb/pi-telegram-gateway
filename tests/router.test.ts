@@ -63,6 +63,19 @@ describe("Router", () => {
     router.disposeAll();
   });
 
+  it("reset disposes the lane and drops it", async () => {
+    const { router, created } = makeRouter();
+    await router.dispatch("1:5", "a");
+    const lane = router.laneForTest("1:5");
+    router.reset("1:5");
+    expect(created()).toBe(1);
+    expect(lane!.dispose).toHaveBeenCalled();
+    expect(router.has("1:5")).toBe(false);
+    await router.dispatch("1:5", "b");   // fresh lane
+    expect(created()).toBe(2);
+    router.disposeAll();
+  });
+
   it("disposeAll disposes every lane", async () => {
     const { router } = makeRouter();
     await router.dispatch("1:1", "a");

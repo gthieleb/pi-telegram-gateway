@@ -34,6 +34,11 @@ export class Router {
     return this.lanes.has(key);
   }
 
+  /** test seam */
+  laneForTest(key: string): LikeLane | undefined {
+    return this.lanes.get(key)?.lane;
+  }
+
   async dispatch(key: string, text: string): Promise<void> {
     if (this.disposed) throw new Error("router disposed");
     let entry = this.lanes.get(key);
@@ -48,6 +53,15 @@ export class Router {
 
   abortAll(): Promise<unknown> {
     return Promise.all([...this.lanes.values()].map((e) => e.lane.abort()));
+  }
+
+  /** Reset a lane: dispose + drop; next dispatch re-creates fresh. */
+  reset(key: string): void {
+    const entry = this.lanes.get(key);
+    if (entry) {
+      entry.lane.dispose();
+      this.lanes.delete(key);
+    }
   }
 
   sweepIdle(): void {

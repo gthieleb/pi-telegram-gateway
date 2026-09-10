@@ -89,7 +89,7 @@ export function claimLock(
 }
 
 export function releaseLock(path: string, handle: LockHandle | { lock?: LeaderData }): void {
-  const data = handle.data ?? handle.lock;
+  const data: LeaderData | undefined = (handle as LockHandle).data ?? (handle as { lock?: LeaderData }).lock;
   if (!data) return;
   const current = readLock(path);
   if (current && current.capability === data.capability && current.pid === data.pid) {

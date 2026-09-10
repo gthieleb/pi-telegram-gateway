@@ -45,7 +45,7 @@ function build(r: Record<string, unknown>): GatewayConfig {
     botToken: r.botToken as string,
     botUsername: r.botUsername as string | undefined,
     allowedUsers: r.allowedUsers as number[],
-    requireMention: r.requireMention ?? false,
+    requireMention: (r.requireMention as boolean | undefined) ?? false,
     cwd: (r.cwd as string | undefined) ?? homedir(),
     idleTimeoutMinutes: (r.idleTimeoutMinutes as number | undefined) ?? 30,
     maxLanes: (r.maxLanes as number | undefined) ?? 8,
