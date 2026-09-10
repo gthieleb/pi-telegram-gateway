@@ -4,6 +4,8 @@ export interface LikeLane {
   abort(): Promise<void>;
   dispose(): void;
   busy: boolean;
+  /** Transcripts file of the underlying session (for persistent bindings). */
+  sessionFile?(): string | undefined;
 }
 export interface LaneEntry {
   lane: LikeLane;
@@ -11,10 +13,14 @@ export interface LaneEntry {
 }
 
 export interface RouterDeps {
-  createLane: (key: string) => Promise<LikeLane>;
+  createLane: (key: string, resumeSessionFile?: string) => Promise<LikeLane>;
   idleTimeoutMs: number;
   maxLanes: number;
   now?: () => number;
+  /** Persistent topic→session bindings (survive restarts/idle disposal). */
+  loadBinding?: (key: string) => string | undefined;
+  saveBinding?: (key: string, sessionFile: string) => void;
+  clearBinding?: (key: string) => void;
 }
 
 export function laneKey(chatId: number, threadId: number | undefined): string {
@@ -44,24 +50,28 @@ export class Router {
     let entry = this.lanes.get(key);
     if (!entry) {
       if (this.lanes.size >= this.deps.maxLanes) this.evictOldest();
-      entry = { lane: await this.deps.createLane(key), lastUsed: (this.deps.now ?? Date.now)() };
+      const resumeSessionFile = this.deps.loadBinding?.(key);
+      entry = { lane: await this.deps.createLane(key, resumeSessionFile), lastUsed: (this.deps.now ?? Date.now)() };
       this.lanes.set(key, entry);
     }
     entry.lastUsed = (this.deps.now ?? Date.now)();
     await entry.lane.prompt(text);
+    const file = entry.lane.sessionFile?.();
+    if (file) this.deps.saveBinding?.(key, file);
   }
 
   abortAll(): Promise<unknown> {
     return Promise.all([...this.lanes.values()].map((e) => e.lane.abort()));
   }
 
-  /** Reset a lane: dispose + drop; next dispatch re-creates fresh. */
+  /** Reset a lane: dispose + drop + clear binding; next dispatch starts fresh. */
   reset(key: string): void {
     const entry = this.lanes.get(key);
     if (entry) {
       entry.lane.dispose();
       this.lanes.delete(key);
     }
+    this.deps.clearBinding?.(key);
   }
 
   sweepIdle(): void {

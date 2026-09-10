@@ -8,6 +8,7 @@ interface SessionLike {
   followUp(text: string): Promise<void>;
   abort(): Promise<void>;
   dispose(): void;
+  sessionFile?: string;
 }
 
 export interface LaneDeps {
@@ -61,5 +62,10 @@ export class Lane {
   /** test seam */
   sessionForTest(): SessionLike {
     return this.session!;
+  }
+
+  /** Transcript file of the underlying session (undefined until first prompt). */
+  sessionFile(): string | undefined {
+    return this.session?.sessionFile as string | undefined;
   }
 }

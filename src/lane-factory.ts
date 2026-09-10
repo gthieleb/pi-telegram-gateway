@@ -22,12 +22,15 @@ export function makeLaneDeps(opts: {
   sessionDir: string;
   modelRuntime: ModelRuntime;
   onReply: (text: string) => Promise<void>;
+  resumeSessionFile?: string;
   log?: (msg: string) => void;
 }): LaneDeps {
   const agentDir = opts.agentDir ?? getAgentDir();
   return {
     async createSession() {
-      const sessionManager = SessionManager.create(opts.cwd, opts.sessionDir);
+      const sessionManager = opts.resumeSessionFile
+        ? SessionManager.open(opts.resumeSessionFile, opts.sessionDir, opts.cwd)
+        : SessionManager.create(opts.cwd, opts.sessionDir);
       const { session } = await createAgentSession({
         cwd: opts.cwd,
         agentDir,

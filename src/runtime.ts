@@ -76,20 +76,37 @@ export async function startGateway(
     /* fresh */
   }
 
+  // persistent topic→session bindings
+  let laneSessions: Record<string, string> = {};
+  const readState = (): { offset?: number; laneSessions?: Record<string, string> } => {
+    try {
+      return JSON.parse(readFileSync(paths.stateFile, "utf8")) as { offset?: number; laneSessions?: Record<string, string> };
+    } catch {
+      return {};
+    }
+  };
+  try {
+    laneSessions = readState().laneSessions ?? {};
+  } catch {
+    laneSessions = {};
+  }
+
   const client = new TelegramClient(cfg.botToken);
   const username = cfg.botUsername ?? (await client.getMe()).username;
 
   const router = new Router({
-    createLane: async (key) => {
+    createLane: async (key, resumeSessionFile) => {
       const [chatIdStr, threadPart] = key.split(":");
       const chatId = Number(chatIdStr);
       const threadId = threadPart === "root" ? undefined : Number(threadPart);
+      if (resumeSessionFile) log(`lane ${key}: resuming ${resumeSessionFile.split("/").pop()}`);
       return await Lane.create(
         key,
         makeLaneDeps({
           cwd: cfg.cwd,
           sessionDir: paths.sessionsDir,
           modelRuntime,
+          resumeSessionFile,
           onReply: (text) => client.sendMessage(chatId, threadId, text),
           log,
         }),
@@ -97,6 +114,15 @@ export async function startGateway(
     },
     idleTimeoutMs: cfg.idleTimeoutMinutes * 60_000,
     maxLanes: cfg.maxLanes,
+    loadBinding: (key) => laneSessions[key],
+    saveBinding: (key, sessionFile) => {
+      laneSessions[key] = sessionFile;
+      persistState();
+    },
+    clearBinding: (key) => {
+      delete laneSessions[key];
+      persistState();
+    },
   });
 
   const gw = new Gateway({ config: cfg, client, router, pollDelayMs: 50, sweepIntervalMs: 30_000 });
@@ -112,11 +138,12 @@ export async function startGateway(
     });
   const persistOffset = () => {
     try {
-      writeFileSync(paths.stateFile, JSON.stringify({ offset: gw.offset }));
+      writeFileSync(paths.stateFile, JSON.stringify({ offset: gw.offset, laneSessions }));
     } catch {
       /* ok */
     }
   };
+  const persistState = persistOffset;
 
   const sweep = setInterval(() => {
     // mode takeover: if a daemon claimed the lock, extension host must stop polling
