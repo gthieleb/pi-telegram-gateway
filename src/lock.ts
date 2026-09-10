@@ -74,9 +74,10 @@ export function claimLock(
       // daemon host supersedes a live extension leader (mode toggle: daemon wins)
       const existingIsExtension = existing.capability.startsWith("extension:");
       if (existingIsExtension && opts.hostType === "daemon") {
-        return { leader: true, lock: undefined }; // takeover: extension sweep will notice
+        // takeover: fall through to reclaim (extension sweep will notice and stop)
+      } else {
+        return { leader: false, lock: existing };
       }
-      return { leader: false, lock: existing };
     }
     // stale → reclaim below
   }
