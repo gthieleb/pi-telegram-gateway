@@ -174,7 +174,7 @@ voice sidecar (Python, lazy spawned)
 | IPC | JSON-Lines auf stdin/stdout: `{"cmd":"play","chat":-100,"url":…}` / `{"event":"state","playing":true,"position":12}` |
 | Secrets | `voice.env` in `~/.pi/agent/pi-telegram-gateway/` (API_ID, API_HASH, BOT_TOKEN) — gitignored, nur `.example` committed |
 | Config | `voice: { enabled, idleExitMinutes }` + Pfad zum Python-Worker |
-| Bestehender Voicebot | `pilemma-voicebot.service` (@PiLemmaVoiceBot) läuft unverändert weiter — Migration/Einstellung = Nutzerentscheidung beim Switchover |
+| Bestehender Voicebot | Während v2-Entwicklung unverändert aktiv (`pilemma-voicebot.service`, @PiLemmaVoiceBot). **Cleanup nach erfolgreicher Verifikation** (Task 10.5): Service stoppen/deaktivieren, Unit-Datei entfernen, Doku in pi-agent-setup anpassen — siehe Switchover |
 
 ## Additions (2026-09-10, user-approved): Telegram Keyboard & Menus (v2)
 

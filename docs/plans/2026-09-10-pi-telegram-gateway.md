@@ -1657,6 +1657,24 @@ EOF
 
 **Commit:** `docs: switchover notes for pi-agent-setup`
 
+### Task 10.5: Cleanup alter Voicebot-Service (NACH erfolgreicher v2-Verifikation)
+
+> Erst ausführen, wenn der Gateway-Voice-Chat über @PiLemmaBot live verifiziert ist
+> (`!play` joint + streamt, `!stop` leaved). Kein Cleanup vorher.
+
+1. Service stilllegen:
+   ```bash
+   systemctl --user stop pilemma-voicebot.service
+   systemctl --user disable pilemma-voicebot.service
+   ```
+2. Unit entfernen: `rm ~/.config/systemd/user/pilemma-voicebot.service && systemctl --user daemon-reload && systemctl --user reset-failed`
+3. `pi-agent-setup/systemd/pilemma-voicebot.service` löschen + README-Tabelle bereinigen (VoiceBot-Zeile → pi-telegram-gateway voice sidecar) + Commit/Push
+4. Projekt `~/projects/pilemma-voicebot/` **nicht** löschen (Quelle für voice/worker.py-Port); im pi-agent-setup-README als `archived — superseded by pi-telegram-gateway voice sidecar` markieren
+5. Bot `@PiLemmaVoiceBot` bleibt bei BotFather bestehen (keine Löschung ohne explizite Nutzeranweisung); falls der Bot in der Gruppe Admin ist, Rolle prüfen und ggf. vom Nutzer klären lassen
+6. Verifikation: `systemctl --user list-units | grep voicebot` → leer; `!play` über @PiLemmaBot funktioniert
+
+**Commit:** `chore: document voicebot service decommission in pi-agent-setup`
+
 ---
 
 ## Phase 10 (v2): Voice Chat — same bot, native dual-stack
@@ -1807,3 +1825,4 @@ export function parseVoiceEvent(line: string): VoiceEvent | null {
 - [ ] `/model` inline picker switches the lane's model; `/new` requires ✅ confirm
 - [ ] Quoted replies include context; typing pulses during turns
 - [ ] `voice.env` (API_ID/API_HASH/BOT_TOKEN) gitignored, only `.example` committed
+- [ ] Old `pilemma-voicebot.service` stopped, disabled, unit removed; pi-agent-setup docs updated
