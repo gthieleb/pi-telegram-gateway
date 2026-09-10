@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "botToken": "123456:REPLACE_ME",
+  "allowedUsers": [123456789],
+  "requireMention": false,
+  "cwd": "/home/gun",
+  "idleTimeoutMinutes": 30,
+  "maxLanes": 8,
+  "mode": "auto"
+}
