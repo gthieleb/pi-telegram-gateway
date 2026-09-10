@@ -1,0 +1,12 @@
+# Secrets — NEVER commit
+config.json
+**/config.json
+!**/config.example.json
+auth.json
+*.session
+.env
+
+node_modules/
+dist/
+*.tgz
+.DS_Store
