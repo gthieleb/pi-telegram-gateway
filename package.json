@@ -3,10 +3,19 @@
   "version": "0.1.0",
   "description": "Telegram gateway for the pi coding agent — every group & topic, per-peer embedded sessions (pi SDK)",
   "type": "module",
-  "keywords": ["pi-package"],
+  "keywords": [
+    "pi-package"
+  ],
   "license": "MIT",
-  "repository": { "type": "git", "url": "git+https://github.com/gthieleb/pi-telegram-gateway.git" },
-  "pi": { "extensions": ["./extensions/index.ts"] },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gthieleb/pi-telegram-gateway.git"
+  },
+  "pi": {
+    "extensions": [
+      "./extensions/index.ts"
+    ]
+  },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*"
   },
@@ -16,6 +25,7 @@
   },
   "devDependencies": {
     "@types/node": "^22",
+    "tsx": "^4.23.13",
     "typescript": "^5.6.0",
     "vitest": "^2.1.0"
   }

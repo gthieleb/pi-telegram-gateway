@@ -46,7 +46,8 @@ Config: `~/.pi/agent/pi-telegram-gateway/config.json`
 | Stage | State |
 |---|---|
 | Design spec | ✅ approved |
-| Implementation | 🚧 in progress |
+| Implementation (v1 core) | ✅ 50 tests green, typecheck clean, daemon cli verified |
+| v2: Voice (sidecar) + Keyboards | ⏳ pending |
 | Switchover from pi-telegram-mux | ⏳ pending |
 
 ## License
