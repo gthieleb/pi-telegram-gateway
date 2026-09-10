@@ -17,7 +17,7 @@ function parseArgs(argv: string[]): { config?: string } {
 async function main(): Promise<void> {
   const agentDir = getAgentDir();
   const paths = configPaths(agentDir);
-  const cfg = loadConfig(paths.configFile);
+  const cfg = loadConfig(agentDir);
   if (!cfg) {
     console.error(
       `No config found at ${paths.configFile}. Copy config.example.json and fill in your bot token.`,

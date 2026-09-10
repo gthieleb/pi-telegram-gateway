@@ -5,11 +5,12 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=%h/projects/pi-telegram-gateway/node_modules/.bin/tsx %h/projects/pi-telegram-gateway/cli.ts
+ExecStart=/home/gun/.virtualenvs/pi/bin/node %h/projects/pi-telegram-gateway/node_modules/.bin/tsx %h/projects/pi-telegram-gateway/cli.ts
 WorkingDirectory=%h
 Restart=on-failure
 RestartSec=5
 Environment=NODE_NO_WARNINGS=1
+Environment="PATH=/home/gun/.virtualenvs/pi/bin:/home/gun/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
 [Install]
 WantedBy=default.target
