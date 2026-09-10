@@ -102,7 +102,9 @@ member/admin of — no per-topic binding table. Gating is user-allowlist based.
   "requireMention": false,         // groups: mention needed?
   "cwd": "/home/gun",
   "idleTimeoutMinutes": 30,
-  "maxLanes": 8                    // LRU cap; overflow → polite busy reply
+  "maxLanes": 8,                    // LRU cap; overflow → polite busy reply
+  "mode": "auto",                  // "auto" | "daemon" | "extension"
+  "voice": { "enabled": false }     // v2: sidecar toggle
 }
 ```
 - Validation errors → clear TUI status line, no crash loop.
@@ -110,6 +112,33 @@ member/admin of — no per-topic binding table. Gating is user-allowlist based.
 ### 7. Status bar (pi TUI)
 - `tg-gw: ready` / `connected (leader)` / `follower (leader pid …)` /
   `conflict (409)` / `429 · Ns` / `error: …` — same UX vocabulary as the mux.
+
+## Hosting modes (toggle)
+
+Der Core (Poller, Router, Lanes, Voice, Keyboard) ist host-unabhängig. Zwei
+Modi, konfigurierbar über `config.json` → `mode`:
+
+| `mode` | Träger | Für wen |
+|---|---|---|
+| `"extension"` | die pi-Session, die das Plugin lädt (Leader-Election via Lockfile, Mux-Stil) | Single-Session-User — Zero-Setup, funktioniert out-of-the-box |
+| `"daemon"` | systemd user service (`pi-telegram-gateway.service` → `node cli.js`) | Multi-Session-User — 24/7, unabhängig von tmux-/pi-Session-Lebenszyklen |
+| `"auto"` (Default) | Daemon, wenn dessen Leader-Lock aktiv ist; sonst Extension-Fallback | Ausfallsicherheit + Dev (`pi -e .`) |
+
+**Toggle-Semantik:**
+- `daemon`-Modus: die pi-Extension wird nur Status-/Notify-Client (liest
+  `runtime/status.json`), **nimmt das Lock nie** — auch nicht bei Daemon-Ausfall
+  (Service wird durch systemd neu gestartet; RestartSec 5).
+- `extension`-Modus: pi-Session hostet wie im Mux; Lockfile verhindert
+  Doppel-Poller, PID-Reuse-Detection reclaimt nach Session-Ende.
+- `auto`: Extension wird Leader, wenn kein Daemon-Lock existiert (Lock-
+  Capability `daemon:` schlägt `extension:` immer vor) — so kann der Daemon
+  die Rolle übernehmen, sobald er läuft, ohne dass interaktive Sessions
+  zwischenfunken.
+- Statuszeile spiegelt den Modus: `tg-gw: daemon (pid N)` /
+  `connected (extension)` / `follower (daemon pid N)`.
+
+Daemon + Extension teilen `src/` vollständig; die Host-Komponente ist
+`cli.ts` (Daemon, systemd) bzw. `extensions/index.ts` (Extension).
 
 ## Extension loading & lifecycle
 - Ships as a pi package: `pi install npm:pi-telegram-gateway` (or

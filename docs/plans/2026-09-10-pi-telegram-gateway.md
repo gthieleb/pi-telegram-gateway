@@ -552,6 +552,26 @@ export function releaseLock(path: string, handle: LockHandle): void {
 
 ---
 
+### Task 1.4: Host-mode field (TDD)
+
+**Files:**
+- Modify: `src/config.ts`, `tests/config.test.ts`
+
+**Step 1: Failing test**
+
+```typescript
+it("defaults mode to auto; rejects unknown modes", () => {
+  expect(normalizeConfig({ version: 1, botToken: "t", allowedUsers: [1] }).mode).toBe("auto");
+  expect(normalizeConfig({ version: 1, botToken: "t", allowedUsers: [1], mode: "daemon" }).mode).toBe("daemon");
+  expect(() => normalizeConfig({ version: 1, botToken: "t", allowedUsers: [1], mode: "telepathy" as never })).toThrow(/mode/);
+});
+```
+
+**Step 2:** Run (FAIL) → add `mode: "auto" | "daemon" | "extension"` to `GatewayConfig` (default `"auto"`, validation against the 3-value union) → Run (PASS).
+**Step 3: Commit** `feat(config): hosting mode toggle (auto|daemon|extension)`
+
+---
+
 ## Phase 2: Gating
 
 ### Task 3.1: Gate matrix (TDD)
@@ -1564,7 +1584,43 @@ export async function startGateway(
 
 **Step 2: Typecheck** — `npx tsc --noEmit` clean. **Step 3: Commit** `feat(runtime): wire gateway to pi sdk, lockfile, status`
 
-### Task 8.2: Extension entry + lifecycle (manual verify)
+### Task 8.3: Daemon host — `cli.ts` + systemd unit
+
+**Files:**
+- Create: `cli.ts` — Node entry: loads config from agent dir, `ModelRuntime.create()`, starts Gateway directly (kein pi-Session-Träger); schreibt `runtime/status.json` (mode, pid, lanes, since, lastError) alle 5 s; SIGTERM → `gw.stop()` + graceful exit
+- Create: `systemd/pi-telegram-gateway.service` — user unit (Muster `pilemma-voicebot.service`):
+
+```ini
+[Unit]
+Description=pi-telegram-gateway (daemon mode)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/env node %h/projects/pi-telegram-gateway/cli.js
+WorkingDirectory=%h
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
+```
+
+**Step 1:** Implement `cli.ts` (argparse-lite: `--mode daemon` forced, `--config <path>` override).
+**Step 2:** Smoke: `node cli.js` mit Test-Config → Statuszeile + `runtime/status.json` gefüllt; Ctrl-C sauber.
+**Step 3: Commit** `feat(daemon): cli entry + systemd unit (mode: daemon)`
+
+### Task 8.4: Mode semantics + status client (TDD)
+
+**Files:**
+- Modify: `src/lock.ts` — `claimLock` gewinnt Option `hostType: "daemon" | "extension"`; Capability `daemon:<pid>` beatmet `extension:` claims; `extension`-Claim gegen aktiven Daemon-Lock → `{ leader: false, daemon: pid }`
+- Modify: `src/runtime.ts` — Extension-Start respektiert `mode`: `daemon` → nie Claim, nur Status aus `status.json` lesen; `auto` → Claim erlaubt, solange kein Daemon-Lock
+- Test: `tests/mode.test.ts` — Daemon-Lock vorhanden → Extension-Claim verweigert & Statuszeile `daemon (pid N)`; kein Daemon + `auto` → Extension leitet
+
+**Step 1–4: TDD-Zyklus.** **Step 5: Commit** `feat(mode): toggle daemon/extension + status-client`
+
+### Task 8.5: Extension entry + lifecycle (manual verify)
 
 **Files:**
 - Create: `extensions/index.ts`
@@ -1646,9 +1702,11 @@ EOF
 ### Task 10.3: Switchover (manual, with user)
 
 1. Remove mux: `pi remove npm:pi-telegram-mux` (or edit `~/.pi/agent/settings.json` packages list)
-2. Restart pi (user action) → old poller dies, gateway claims lock, token conflict-free
-3. Verify: message in a **different** topic → fresh lane → answer lands in that topic
-4. ⚠️ Mux topic 1655 dies with the old session by design
+2. Config: `"mode": "daemon"` in `~/.pi/agent/pi-telegram-gateway/config.json`
+3. Service aktivieren: `cp systemd/pi-telegram-gateway.service ~/.config/systemd/user/ && systemctl --user daemon-reload && systemctl --user enable --now pi-telegram-gateway.service`
+4. Restart pi (user action) → alter Mux-Poller stirbt, Daemon hält den Lock, Token konfliktfrei
+5. Verify: Statuszeile `tg-gw: daemon (pid N)` in pi; Nachricht in einem **anderen** Topic → frische Lane → Antwort in-place
+6. ⚠️ Mux topic 1655 dies with the old session by design
 
 ### Task 10.4: Update `pi-agent-setup` repo
 
@@ -1815,6 +1873,8 @@ export function parseVoiceEvent(line: string): VoiceEvent | null {
 - [ ] `pi -e /home/gun/projects/pi-telegram-gateway` starts; status line `tg-gw: connected`
 - [ ] Live: answer in foreign topic (not 1655) reaches a fresh lane and replies in-place
 - [ ] Mux removed from settings; no 409 conflicts
+- [ ] Daemon mode verified: service enabled, status.json reflects leader; extension shows `daemon (pid N)`
+- [ ] Extension mode verified: `pi -e .` hosts the gateway when `mode: extension`/`auto` without daemon
 - [ ] No secrets in git history
 
 ## Definition of Done (v2 additions)
