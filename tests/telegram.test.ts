@@ -22,7 +22,7 @@ describe("TelegramClient", () => {
   });
 
   it("sendMessage chunks and threads", async () => {
-    const fetchFn = vi.fn().mockResolvedValue(jsonRes({ ok: true, result: {} }));
+    const fetchFn = vi.fn().mockImplementation(() => Promise.resolve(jsonRes({ ok: true, result: {} })));
     const client = new TelegramClient("TOK", "https://api.test", fetchFn as typeof fetch);
     await client.sendMessage(-100, 77, "x".repeat(5000));
     expect(fetchFn).toHaveBeenCalledTimes(2);
