@@ -95,6 +95,31 @@ describe("Router", () => {
     router.disposeAll();
   });
 
+  it("attachSession binds the file, eagerly resumes and future dispatch resumes it", async () => {
+    const bindings = new Map<string, string>();
+    const resumes: string[] = [];
+    const factory = vi.fn(async (key: string, resume?: string) => {
+      if (resume) resumes.push(resume);
+      return fakeLane({ sessionFile: `sessions/${key}.jsonl` }) as LikeLane;
+    });
+    const router = new Router({
+      createLane: factory,
+      idleTimeoutMs: 1000,
+      maxLanes: 4,
+      loadBinding: (k) => bindings.get(k),
+      saveBinding: (k, f) => bindings.set(k, f),
+      clearBinding: (k) => bindings.delete(k),
+    });
+    await router.attachSession("1:5", "sessions/att.jsonl");
+    expect(bindings.get("1:5")).toBe("sessions/att.jsonl");
+    expect(factory).toHaveBeenCalledWith("1:5", "sessions/att.jsonl"); // eager resume
+    expect(resumes).toEqual(["sessions/att.jsonl"]);
+    expect(router.has("1:5")).toBe(true);
+    await router.dispatch("1:5", "next");
+    expect(router.laneForTest("1:5")!.busy).toBe(false);
+    router.disposeAll();
+  });
+
   it("disposes idle lanes beyond timeout", async () => {
     let t = 0;
     const { router } = makeRouter({ now: () => t });

@@ -131,6 +131,16 @@ describe("attach flow", () => {
     expect(client.answerCallbackQuery).toHaveBeenCalled();
   });
 
+  it("help replies with command overview", async () => {
+    const client = makeClient();
+    const gw = new Gateway({ config: cfg as never, client, router: router() as never });
+    await gw.handleMessage({
+      message_id: 1, date: 0, from: { id: 42, is_bot: false },
+      chat: { id: -100, type: "supergroup" }, message_thread_id: 7, text: "/help",
+    } as never);
+    expect((client.sendMessage as ReturnType<typeof vi.fn>).mock.calls[0][2] as string).toContain("Kommandos");
+  });
+
   it("ask_user callback resolves pending answer", async () => {
     const client = makeClient();
     const gw = new Gateway({ config: cfg as never, client, router: router() as never });
