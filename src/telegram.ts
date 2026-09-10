@@ -87,6 +87,7 @@ export class TelegramClient {
     threadId: number | undefined,
     text: string,
     replyToMessageId?: number,
+    replyMarkup?: object,
   ): Promise<void> {
     const parts = splitMessage(text);
     for (const [i, part] of parts.entries()) {
@@ -95,6 +96,7 @@ export class TelegramClient {
       if (replyToMessageId !== undefined && i === 0) {
         body.reply_parameters = { message_id: replyToMessageId, allow_sending_without_reply: true };
       }
+      if (replyMarkup && i === 0) body.reply_markup = replyMarkup; // keyboard on first chunk only
       await this.call("sendMessage", body);
     }
   }
@@ -111,5 +113,15 @@ export class TelegramClient {
 
   async setMyCommands(commands: { command: string; description: string }[]): Promise<void> {
     await this.call("setMyCommands", { commands });
+  }
+
+  async answerCallbackQuery(callbackQueryId: string, text?: string): Promise<void> {
+    const body: Record<string, unknown> = { callback_query_id: callbackQueryId };
+    if (text) body.text = text;
+    try {
+      await this.call("answerCallbackQuery", body);
+    } catch {
+      /* best effort — expired callbacks */
+    }
   }
 }
