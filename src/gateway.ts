@@ -9,7 +9,6 @@ export interface GatewayDeps {
   config: GatewayConfig;
   client: TelegramClient;
   router: Router;
-  lock: { claim: () => { leader: boolean }; release: () => void };
   pollDelayMs?: number;
   sweepIntervalMs?: number;
 }

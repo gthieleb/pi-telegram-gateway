@@ -1,0 +1,15 @@
+[Unit]
+Description=pi-telegram-gateway (daemon mode)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/env node %h/projects/pi-telegram-gateway/cli.js
+WorkingDirectory=%h
+Restart=on-failure
+RestartSec=5
+Environment=NODE_NO_WARNINGS=1
+
+[Install]
+WantedBy=default.target

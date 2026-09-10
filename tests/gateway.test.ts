@@ -41,7 +41,6 @@ function harness(updates: TgUpdate[][], routerOverrides?: Record<string, unknown
     config: cfg as never,
     client,
     router: router as never,
-    lock: { claim: () => ({ leader: true }), release: vi.fn() } as never,
     sweepIntervalMs: 10_000,
     pollDelayMs: 0,
   });
