@@ -68,9 +68,11 @@ member/admin of — no per-topic binding table. Gating is user-allowlist based.
 - Shared `ModelRuntime` across lanes (one instance).
 - Transcripts: `SessionManager` pointed at `~/.pi/agent/gateway/sessions/`
   (own directory; user approved "same home, separate session dir if needed").
-- Outbound: assistant final text → Telegram, chunked at 4096 chars, with
-  `message_thread_id` of the lane; `reply_parameters` to the triggering
-  message for threads (keeps the answer anchored).
+- Outbound: assistant final text → Telegram, chunked at 4096 chars. Every
+  send carries `message_thread_id` of the lane. If `requireMention` is on or
+  the chat is a plain group, additionally anchor with `reply_parameters` to
+  the triggering message; inside forum topics the thread id alone is
+  sufficient (no reply anchor, keeps the topic lane clean).
 - Prompt metadata: lane prepends a short system-style prefix? — **No.** The
   origin context (chat/topic) is transport, not task content; keep prompts
   verbatim.
