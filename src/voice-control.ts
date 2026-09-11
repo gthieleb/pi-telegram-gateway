@@ -110,6 +110,7 @@ export class VoiceController {
     this.child = child;
     this.ready = false;
     this.queue = [];
+    this.deps.log?.("🎙 voice worker spawned (lazy)");
     void this.deps.send(chatId, threadId, "⏳ Voice-Client startet …");
     if (!this.idleTimer) {
       this.idleTimer = setInterval(() => {

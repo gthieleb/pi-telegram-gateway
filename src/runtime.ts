@@ -130,6 +130,7 @@ export async function startGateway(
                 log,
               });
               if (ogg?.endsWith(".ogg")) {
+                log(`🔊 TTS ok (${ogg.split("/").pop()}) — sendVoice …`);
                 try {
                   await client.sendVoice(chatId, threadId, ogg);
                 } catch (err) {
@@ -184,10 +185,15 @@ export async function startGateway(
     cfg.voice?.enabled === true
       ? {
           transcribeVoice: async (fileId) => {
+            log("🎙 voice: downloading voice note …");
             const tmp = joinPaths(tmpdir(), `gw-voice-${fileId.slice(-12)}.ogg`);
             const downloaded = await client.downloadFile(fileId, tmp);
-            if (!downloaded) return "";
-            return await transcribeFile(downloaded, {
+            if (!downloaded) {
+              log("🎙 voice: download FAILED");
+              return "";
+            }
+            log(`🎙 voice: downloaded ${downloaded}, transcribing …`);
+            const transcript = await transcribeFile(downloaded, {
               pythonBin: cfg.voice?.pythonBin,
               scriptPath: joinPaths(__dirnameVoice(), "voice", "transcribe.py"),
               env: {
@@ -196,6 +202,8 @@ export async function startGateway(
               },
               log,
             });
+            log(`🎙 STT: "${transcript.slice(0, 120)}"`);
+            return transcript;
           },
         }
       : undefined;
