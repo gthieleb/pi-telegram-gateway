@@ -64,6 +64,7 @@ function build(r: Record<string, unknown>): GatewayConfig {
     idleTimeoutMinutes: (r.idleTimeoutMinutes as number | undefined) ?? 30,
     maxLanes: (r.maxLanes as number | undefined) ?? 8,
     mode: (r.mode as HostMode | undefined) ?? "auto",
+    voice: r.voice as GatewayConfig["voice"],
   };
 }
 

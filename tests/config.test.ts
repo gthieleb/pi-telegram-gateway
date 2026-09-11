@@ -32,4 +32,11 @@ describe("config", () => {
     expect(normalizeConfig({ version: 1, botToken: "t", allowedUsers: [1], mode: "extension" }).mode).toBe("extension");
     expect(() => normalizeConfig({ version: 1, botToken: "t", allowedUsers: [1], mode: "telepathy" as never })).toThrow(/mode/);
   });
+
+  it("passes voice config through", () => {
+    const cfg = normalizeConfig({ version: 1, botToken: "t", allowedUsers: [1], voice: { enabled: true, replies: "both" } });
+    expect(cfg.voice?.enabled).toBe(true);
+    expect(cfg.voice?.replies).toBe("both");
+    expect(() => normalizeConfig({ version: 1, botToken: "t", allowedUsers: [1], voice: { enabled: "yes" as never } })).toThrow(/voice/);
+  });
 });
