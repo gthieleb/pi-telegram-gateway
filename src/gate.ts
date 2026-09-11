@@ -8,10 +8,16 @@ export interface GateMessage {
   message_thread_id?: number;
   text?: string;
   caption?: string;
+  voice?: { file_id: string; duration?: number };
   reply_to_message?: { from?: { id: number; is_bot?: boolean } };
 }
 
 const GROUP_TYPES = new Set(["group", "supergroup"]);
+
+/** User-allowlist check only (voice messages have no text/mention). */
+export function isAllowedSender(m: GateMessage, cfg: GatewayConfig): boolean {
+  return Boolean(m.from && !m.from.is_bot && cfg.allowedUsers.includes(m.from.id));
+}
 
 export function shouldDispatch(m: GateMessage, cfg: GatewayConfig, botUsername: string): boolean {
   if (!m.from || m.from.is_bot) return false;

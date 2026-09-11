@@ -48,6 +48,19 @@ export class VoiceController {
     this.child!.stdin.write(line);
   }
 
+  private lastOrigin: { chatId: number; threadId?: number } = { chatId: 0 };
+
+  /** Play a local TTS file into the active voice chat; errors stay quiet. */
+  async playFileQuiet(chatId: number, path: string): Promise<void> {
+    this.ensureChild(chatId, undefined);
+    const line = voiceIpcMessage({ cmd: "play_file", chat: chatId, path, quiet: true });
+    if (!this.ready) {
+      this.queue.push(line);
+      return;
+    }
+    this.child?.stdin.write(line);
+  }
+
   /** test seam: feed one stdout line as if the worker emitted it. */
   handleStdoutLine(line: string): void {
     const event = line.trim();
@@ -66,13 +79,14 @@ export class VoiceController {
       return;
     }
     const text = (parsed as { text?: string }).text;
-    if (typeof text === "string") {
+    const quiet = (parsed as { quiet?: boolean }).quiet === true;
+    if (quiet) return; // suppressed (e.g. play_file into a non-active call)
+    if (typeof text === "string" && text) {
       const chat = (parsed as { chat?: number }).chat ?? this.lastOrigin.chatId;
       void this.deps.send(chat, this.lastOrigin.threadId, text);
     }
   }
 
-  private lastOrigin: { chatId: number; threadId?: number } = { chatId: 0 };
 
   private ensureChild(chatId: number, threadId?: number): void {
     this.lastOrigin = { chatId, threadId };

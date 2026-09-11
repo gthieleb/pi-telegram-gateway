@@ -10,6 +10,16 @@ export interface VoiceConfig {
   idleExitMinutes?: number;
   workerPath?: string;
   pythonBin?: string;
+  /** Voice conversation: how agent replies are delivered. Default "voice-note+call". */
+  replies?: "text" | "voice-note" | "both";
+  /** faster-whisper model size (default "base"). */
+  sttModel?: string;
+  /** transcription language hint (default "de"). */
+  sttLanguage?: string;
+  /** piper model path (default ~/.local/share/piper/de_DE-thorsten-medium.onnx). */
+  ttsModelPath?: string;
+  /** also speak replies into an active voice chat. Default true. */
+  callOutput?: boolean;
 }
 
 export interface GatewayConfig {

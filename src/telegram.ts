@@ -10,6 +10,7 @@ export interface TgMessage {
   message_thread_id?: number;
   text?: string;
   caption?: string;
+  voice?: { file_id: string; duration?: number; mime_type?: string };
   reply_to_message?: { message_id: number; from?: TgUser };
 }
 export interface TgUpdate {
@@ -122,6 +123,38 @@ export class TelegramClient {
       await this.call("answerCallbackQuery", body);
     } catch {
       /* best effort — expired callbacks */
+    }
+  }
+
+  /** Download a file (voice note etc.) by file_id to a local path. */
+  async downloadFile(fileId: string, destPath: string): Promise<string | null> {
+    try {
+      const info = await this.call<{ file_path?: string }>("getFile", { file_id: fileId });
+      if (!info?.file_path) return null;
+      const res = await this.fetchFn(`${this.baseUrl}/file/bot${this.token}/${info.file_path}`);
+      if (!res.ok) return null;
+      const buf = Buffer.from(await res.arrayBuffer());
+      const { writeFileSync } = await import("node:fs");
+      writeFileSync(destPath, buf);
+      return destPath;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Send a voice note (OGG/Opus). */
+  async sendVoice(chatId: number, threadId: number | undefined, filePath: string): Promise<void> {
+    const { readFileSync } = await import("node:fs");
+    const buf = readFileSync(filePath);
+    const form = new FormData();
+    form.append("chat_id", String(chatId));
+    if (threadId !== undefined) form.append("message_thread_id", String(threadId));
+    form.append("voice", new Blob([new Uint8Array(buf)], { type: "audio/ogg" }), "reply.ogg");
+    const res = await this.fetchFn(`${this.baseUrl}/bot${this.token}/sendVoice`, { method: "POST", body: form });
+    if (!res.ok) {
+      let desc = "";
+      try { desc = (await res.json() as { description?: string }).description ?? ""; } catch { /* */ }
+      throw new BotApiError(desc || `sendVoice HTTP ${res.status}`, res.status);
     }
   }
 }

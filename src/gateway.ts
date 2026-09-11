@@ -1,6 +1,6 @@
 // src/gateway.ts
 import type { GatewayConfig } from "./config.js";
-import { parseCommand, shouldDispatch } from "./gate.js";
+import { isAllowedSender, parseCommand, shouldDispatch } from "./gate.js";
 import type { Router } from "./router.js";
 import type { TelegramClient, TgMessage, TgUpdate, CallbackQuery } from "./telegram.js";
 import { laneKey } from "./router.js";
@@ -35,6 +35,8 @@ export interface GatewayDeps {
   router: Router;
   /** voice sidecar controller (only when voice.enabled in config) */
   voice?: { command: (v: VoiceCommand, chatId: number, threadId?: number) => Promise<void>; dispose(): void };
+  /** voice conversation bridge: inbound voice → transcript (download+STT) */
+  voiceConv?: { transcribeVoice: (fileId: string) => Promise<string> };
   pollDelayMs?: number;
   sweepIntervalMs?: number;
   /** injected: session list for the /attach picker */
@@ -88,11 +90,30 @@ export class Gateway {
 
   async handleMessage(m: TgMessage): Promise<void> {
     const botUsername = await this.resolveBotUsername();
-    if (!shouldDispatch(m as never, this.deps.config, botUsername)) return;
     const threadId = m.message_thread_id;
-    const text = (m.text ?? m.caption ?? "").trim();
-    if (!text) return;
     const laneKeyStr = laneKey(m.chat.id, threadId);
+    let text = (m.text ?? m.caption ?? "").trim();
+
+    // voice notes: gate by allowlist only → transcribe → dispatch as prompt
+    let fromVoice = false;
+    if (!text && ((m as unknown as { voice?: { file_id: string } }).voice)) {
+      fromVoice = true;
+      if (!isAllowedSender(m as never, this.deps.config)) return;
+      if (!this.deps.voiceConv) {
+        await this.deps.client.sendMessage(m.chat.id, threadId, "🎙 Voice-Konversation ist deaktiviert.");
+        return;
+      }
+      await this.deps.client.sendChatAction(m.chat.id, threadId);
+      const transcript = await this.deps.voiceConv.transcribeVoice(((m as unknown as { voice: { file_id: string } }).voice).file_id);
+      if (!transcript) {
+        await this.deps.client.sendMessage(m.chat.id, threadId, "🎙 ❓ Sprachnachricht nicht verstanden — bitte nochmal.");
+        return;
+      }
+      text = transcript;
+    }
+    if (!isAllowedSender(m as never, this.deps.config)) return;
+    if (!fromVoice && !shouldDispatch(m as never, this.deps.config, botUsername)) return;
+    if (!text) return;
 
     const cmd = parseCommand(text);
     if (cmd?.name === "new") {

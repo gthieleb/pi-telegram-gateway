@@ -1,11 +1,14 @@
 // src/runtime.ts
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join as joinPaths } from "node:path";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { getAgentDir, ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { Lane } from "./lane.js";
 import { makeLaneDeps } from "./lane-factory.js";
 import { VoiceController } from "./voice-control.js";
+import { transcribeFile } from "./stt.js";
+import { synthesizeVoice } from "./tts.js";
 import { configPaths, loadConfig, type GatewayConfig } from "./config.js";
 import { claimLock, readLock, releaseLock, type LockHandle } from "./lock.js";
 import { Gateway } from "./gateway.js";
@@ -117,7 +120,27 @@ export async function startGateway(
           sessionDir: paths.sessionsDir,
           modelRuntime,
           resumeSessionFile,
-          onReply: (text) => client.sendMessage(chatId, threadId, text),
+          onReply: async (text) => {
+            await client.sendMessage(chatId, threadId, text);
+            // voice conversation replies: TTS voice note + optional call output
+            if (cfg.voice?.enabled && (cfg.voice.replies ?? "both") !== "text") {
+              const ogg = await synthesizeVoice(text, {
+                pythonBin: cfg.voice.pythonBin,
+                modelPath: cfg.voice.ttsModelPath,
+                log,
+              });
+              if (ogg?.endsWith(".ogg")) {
+                try {
+                  await client.sendVoice(chatId, threadId, ogg);
+                } catch (err) {
+                  log(`sendVoice failed: ${String(err)}`);
+                }
+              }
+              if ((cfg.voice.callOutput ?? true) && voiceCtl) {
+                if (ogg) await voiceCtl.playFileQuiet(chatId, ogg);
+              }
+            }
+          },
           onAskUser: (question, options) => {
             if (!gwRef) throw new Error("gateway not ready");
             const pending = gwRef.registerAskUser(key, chatId, threadId, question, options);
@@ -141,27 +164,50 @@ export async function startGateway(
     },
   });
 
+  const voiceCtl: VoiceController | null =
+    cfg.voice?.enabled === true
+      ? (() => {
+          const workerPath = cfg.voice.workerPath ?? joinPaths(__dirnameVoice(), "voice", "worker.py");
+          const env: Record<string, string> = { VOICE_ENV: joinPaths(paths.base, "voice.env") };
+          return new VoiceController({
+            send: (chatId, threadId, text) => client.sendMessage(chatId, threadId, text),
+            pythonBin: cfg.voice.pythonBin,
+            workerPath,
+            env,
+            idleExitMs: (cfg.voice.idleExitMinutes ?? 10) * 60_000,
+            log,
+          });
+        })()
+      : null;
+
+  const voiceConv: { transcribeVoice: (fileId: string) => Promise<string> } | undefined =
+    cfg.voice?.enabled === true
+      ? {
+          transcribeVoice: async (fileId) => {
+            const tmp = joinPaths(tmpdir(), `gw-voice-${fileId.slice(-12)}.ogg`);
+            const downloaded = await client.downloadFile(fileId, tmp);
+            if (!downloaded) return "";
+            return await transcribeFile(downloaded, {
+              pythonBin: cfg.voice?.pythonBin,
+              scriptPath: joinPaths(__dirnameVoice(), "voice", "transcribe.py"),
+              env: {
+                WHISPER_MODEL: cfg.voice?.sttModel ?? "base",
+                WHISPER_LANG: cfg.voice?.sttLanguage ?? "de",
+              },
+              log,
+            });
+          },
+        }
+      : undefined;
+
   const gw: Gateway = new Gateway({
     config: cfg,
     client,
     router,
     pollDelayMs: 50,
     sweepIntervalMs: 30_000,
-    voice:
-      cfg.voice?.enabled === true
-        ? (() => {
-            const workerPath = cfg.voice.workerPath ?? joinPaths(__dirnameVoice(), "voice", "worker.py");
-            const env: Record<string, string> = { VOICE_ENV: joinPaths(paths.base, "voice.env") };
-            return new VoiceController({
-              send: (chatId, threadId, text) => client.sendMessage(chatId, threadId, text),
-              pythonBin: cfg.voice.pythonBin,
-              workerPath,
-              env,
-              idleExitMs: (cfg.voice.idleExitMinutes ?? 10) * 60_000,
-              log,
-            });
-          })()
-        : undefined,
+    voice: voiceCtl ?? undefined,
+    voiceConv,
   });
   gwRef = gw;
   gw.offset = offset;

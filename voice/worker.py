@@ -88,6 +88,19 @@ async def handle(cmd: dict) -> None:
             vol = int(cmd.get("volume", 100))
             await call_py.change_volume_call(chat, vol)
             emit({"event": "state", "chat": chat, "text": f"🔊 Volume set to {vol}"})
+        elif kind == "play_file":
+            # TTS output (local wav/ogg) — spoken into the active voice chat.
+            # Success is silent (no text forwarded); failures only when not quiet.
+            path = cmd.get("path", "")
+            quiet = bool(cmd.get("quiet", False))
+            try:
+                await call_py.play(chat, MediaStream(path, video_flags=MediaStream.Flags.IGNORE))
+                emit({"event": "speaking", "chat": chat})
+            except Exception as e:
+                if not quiet:
+                    emit({"event": "error", "chat": chat, "text": f"❌ {type(e).__name__}: {e}"})
+                else:
+                    emit({"event": "error", "quiet": True, "text": str(e)})
         elif kind == "status":
             try:
                 seconds = await call_py.time(chat)
