@@ -1,13 +1,21 @@
 // src/runtime.ts
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join as joinPaths } from "node:path";
+import { fileURLToPath } from "node:url";
 import { getAgentDir, ModelRuntime } from "@earendil-works/pi-coding-agent";
+import { Lane } from "./lane.js";
+import { makeLaneDeps } from "./lane-factory.js";
+import { VoiceController } from "./voice-control.js";
 import { configPaths, loadConfig, type GatewayConfig } from "./config.js";
 import { claimLock, readLock, releaseLock, type LockHandle } from "./lock.js";
 import { Gateway } from "./gateway.js";
 import { Router } from "./router.js";
 import { TelegramClient } from "./telegram.js";
-import { makeLaneDeps } from "./lane-factory.js";
-import { Lane } from "./lane.js";
+
+function __dirnameVoice(): string {
+  // package root (…/pi-telegram-gateway) — src/ is one level below
+  return joinPaths(fileURLToPath(import.meta.url), "..", "..");
+}
 
 export interface StatusSink {
   setStatus(key: string, text: string): void;
@@ -133,7 +141,28 @@ export async function startGateway(
     },
   });
 
-  const gw: Gateway = new Gateway({ config: cfg, client, router, pollDelayMs: 50, sweepIntervalMs: 30_000 });
+  const gw: Gateway = new Gateway({
+    config: cfg,
+    client,
+    router,
+    pollDelayMs: 50,
+    sweepIntervalMs: 30_000,
+    voice:
+      cfg.voice?.enabled === true
+        ? (() => {
+            const workerPath = cfg.voice.workerPath ?? joinPaths(__dirnameVoice(), "voice", "worker.py");
+            const env: Record<string, string> = { VOICE_ENV: joinPaths(paths.base, "voice.env") };
+            return new VoiceController({
+              send: (chatId, threadId, text) => client.sendMessage(chatId, threadId, text),
+              pythonBin: cfg.voice.pythonBin,
+              workerPath,
+              env,
+              idleExitMs: (cfg.voice.idleExitMinutes ?? 10) * 60_000,
+              log,
+            });
+          })()
+        : undefined,
+  });
   gwRef = gw;
   gw.offset = offset;
 

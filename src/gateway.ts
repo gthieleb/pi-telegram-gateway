@@ -7,6 +7,7 @@ import { laneKey } from "./router.js";
 import { CallbackRegistry, newMenuId } from "./callbacks.js";
 import { sessionsKeyboard, attachReplayKeyboard, askUserKeyboard, type SessionOption } from "./keyboard.js";
 import { readSessionMessages, renderSessionHistory } from "./replay.js";
+import { isVoiceCommand, type VoiceCommand } from "./voice.js";
 
 export interface SessionListItem extends SessionOption {}
 
@@ -32,6 +33,8 @@ export interface GatewayDeps {
     setMyCommands?: (commands: { command: string; description: string }[]) => Promise<void>;
   };
   router: Router;
+  /** voice sidecar controller (only when voice.enabled in config) */
+  voice?: { command: (v: VoiceCommand, chatId: number, threadId?: number) => Promise<void>; dispose(): void };
   pollDelayMs?: number;
   sweepIntervalMs?: number;
   /** injected: session list for the /attach picker */
@@ -121,6 +124,17 @@ export class Gateway {
     const pendingMenuId = this.pendingAskByLane.get(laneKeyStr);
     if (pendingMenuId && this.pendingAskMenu.has(pendingMenuId)) {
       this.resolveAsk(pendingMenuId, text);
+      return;
+    }
+
+    // voice commands (!play, !pause, …) bypass the lane and drive the sidecar
+    const voice = isVoiceCommand(text);
+    if (voice) {
+      if (this.deps.voice) {
+        await this.deps.voice.command(voice, m.chat.id, threadId);
+        return;
+      }
+      await this.deps.client.sendMessage(m.chat.id, threadId, "🔇 Voice ist in dieser Konfiguration deaktiviert.");
       return;
     }
 

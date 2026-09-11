@@ -37,6 +37,10 @@ function assertValid(r: Record<string, unknown>): void {
     throw new Error("Invalid config: idleTimeoutMinutes must be >= 1");
   if (r.mode !== undefined && (typeof r.mode !== "string" || !HOST_MODES.has(r.mode as HostMode)))
     throw new Error("Invalid config: mode must be one of auto|daemon|extension");
+  if (r.voice !== undefined) {
+    if (typeof r.voice !== "object" || r.voice === null || typeof (r.voice as { enabled?: unknown }).enabled !== "boolean")
+      throw new Error("Invalid config: voice.enabled must be a boolean");
+  }
 }
 
 function build(r: Record<string, unknown>): GatewayConfig {

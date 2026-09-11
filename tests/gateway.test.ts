@@ -97,4 +97,19 @@ describe("Gateway", () => {
     expect(handled).toBe(false);
     expect(client.sendMessage).not.toHaveBeenCalled();
   });
+  it("voice commands are recognized and forwarded to the controller", async () => {
+    const c = { ...cfg, voice: { enabled: true } };
+    const voiceCmd = vi.fn(async () => {});
+    const { client, router: rt } = harness([], {});
+    const gw = new Gateway({ config: c as never, client, router: rt as never, voice: { command: voiceCmd, dispose: vi.fn() } });
+    await gw.handleMessage({ message_id: 1, date: 0, from: { id: 42, is_bot: false }, chat: { id: -100, type: "supergroup" }, message_thread_id: 7, text: "!pause" } as never);
+    expect(voiceCmd).toHaveBeenCalled();
+  });
+
+  it("voice command without controller gets a polite notice", async () => {
+    const { client, router: rt } = harness([], {});
+    const gw = new Gateway({ config: cfg as never, client, router: rt as never });
+    await gw.handleMessage({ message_id: 1, date: 0, from: { id: 42, is_bot: false }, chat: { id: -100, type: "supergroup" }, message_thread_id: 7, text: "!play x" } as never);
+    expect((client.sendMessage as ReturnType<typeof vi.fn>).mock.calls[0][2] as string).toContain("Voice");
+  });
 });
