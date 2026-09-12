@@ -6,6 +6,7 @@ import {
   type ToolDefinition,
   SessionManager,
 } from "@earendil-works/pi-coding-agent";
+import type { Model } from "@earendil-works/pi-ai";
 import { Type } from "typebox";
 import type { LaneDeps } from "./lane.js";
 
@@ -51,6 +52,7 @@ export function makeLaneDeps(opts: {
   agentDir?: string;
   sessionDir: string;
   modelRuntime: ModelRuntime;
+  model?: Model<import("@earendil-works/pi-ai").Api>;
   onReply: (text: string) => Promise<void>;
   resumeSessionFile?: string;
   onAskUser?: AskUserFn;
@@ -67,6 +69,7 @@ export function makeLaneDeps(opts: {
         agentDir,
         modelRuntime: opts.modelRuntime,
         sessionManager,
+        ...(opts.model ? { model: opts.model } : {}),
         customTools: opts.onAskUser ? [buildAskUserTool(opts.onAskUser)] : [],
       });
       return session as never;

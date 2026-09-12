@@ -1,7 +1,7 @@
 {
   "name": "pi-telegram-gateway",
   "version": "0.1.0",
-  "description": "Telegram gateway for the pi coding agent — every group & topic, per-peer embedded sessions (pi SDK)",
+  "description": "Telegram gateway for the pi coding agent \u2014 every group & topic, per-peer embedded sessions (pi SDK)",
   "type": "module",
   "keywords": [
     "pi-package"
@@ -18,7 +18,8 @@
   },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*",
-    "typebox": "*"
+    "typebox": "*",
+    "@earendil-works/pi-ai": "*"
   },
   "scripts": {
     "test": "vitest run",

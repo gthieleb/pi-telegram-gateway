@@ -3,7 +3,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join as joinPaths } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
-import { getAgentDir, ModelRuntime } from "@earendil-works/pi-coding-agent";
+import { createAgentSession, getAgentDir, ModelRuntime, SettingsManager, SessionManager } from "@earendil-works/pi-coding-agent";
 import { Lane } from "./lane.js";
 import { makeLaneDeps } from "./lane-factory.js";
 import { VoiceController } from "./voice-control.js";
@@ -80,6 +80,30 @@ export async function startGateway(
   const modelRuntime = await ModelRuntime.create();
   mkdirSync(paths.sessionsDir, { recursive: true });
 
+  // provider bootstrap: run package extension factories once on the shared
+  // ModelRuntime so package providers (e.g. ollama-cloud) get registered.
+  // Pattern: disk-agent bootstrapSupergrok — throwaway in-memory session.
+  const resolvedModel = await (async () => {
+    if (!cfg.model) return undefined;
+    const probe = await createAgentSession({
+      cwd: cfg.cwd,
+      agentDir,
+      modelRuntime,
+      sessionManager: SessionManager.inMemory(cfg.cwd),
+      settingsManager: SettingsManager.create(cfg.cwd, agentDir),
+      tools: [],
+      noTools: "all",
+    });
+    probe.session.dispose();
+    const model = modelRuntime.getModel(cfg.model.provider, cfg.model.id);
+    if (!model) {
+      log(`⚠️ config model ${cfg.model.provider}/${cfg.model.id} not resolvable after bootstrap`);
+      return undefined;
+    }
+    log(`lane model: ${cfg.model.provider}/${cfg.model.id}`);
+    return model;
+  })();
+
   let offset = 0;
   try {
     offset = (JSON.parse(readFileSync(paths.stateFile, "utf8")) as { offset?: number }).offset ?? 0;
@@ -120,6 +144,7 @@ export async function startGateway(
           sessionDir: paths.sessionsDir,
           modelRuntime,
           resumeSessionFile,
+          model: resolvedModel,
           onReply: async (text) => {
             await client.sendMessage(chatId, threadId, text);
             // voice conversation replies: TTS voice note + optional call output

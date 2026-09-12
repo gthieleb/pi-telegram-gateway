@@ -22,6 +22,11 @@ export interface VoiceConfig {
   callOutput?: boolean;
 }
 
+export interface ModelOverride {
+  provider: string;
+  id: string;
+}
+
 export interface GatewayConfig {
   version: number;
   botToken: string;
@@ -33,6 +38,8 @@ export interface GatewayConfig {
   maxLanes: number;
   mode: HostMode;
   voice?: VoiceConfig;
+  /** lane model override (else pi settings default, else first available). */
+  model?: ModelOverride;
 }
 
 const HOST_MODES = new Set<HostMode>(["auto", "daemon", "extension"]);
@@ -51,6 +58,11 @@ function assertValid(r: Record<string, unknown>): void {
     if (typeof r.voice !== "object" || r.voice === null || typeof (r.voice as { enabled?: unknown }).enabled !== "boolean")
       throw new Error("Invalid config: voice.enabled must be a boolean");
   }
+  if (r.model !== undefined) {
+    const m = r.model as { provider?: unknown; id?: unknown };
+    if (typeof m !== "object" || m === null || typeof m.provider !== "string" || typeof m.id !== "string")
+      throw new Error("Invalid config: model must be { provider, id }");
+  }
 }
 
 function build(r: Record<string, unknown>): GatewayConfig {
@@ -65,6 +77,7 @@ function build(r: Record<string, unknown>): GatewayConfig {
     maxLanes: (r.maxLanes as number | undefined) ?? 8,
     mode: (r.mode as HostMode | undefined) ?? "auto",
     voice: r.voice as GatewayConfig["voice"],
+    model: r.model as GatewayConfig["model"],
   };
 }
 
