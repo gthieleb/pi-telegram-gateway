@@ -56,9 +56,11 @@ app = Client(
     workdir=os.path.join(os.path.dirname(__file__), "session"),
     no_updates=True,
 )
+# Pyrogram creates the workdir lazily but sqlite needs it at connect time
+os.makedirs(os.path.join(os.path.dirname(__file__), "session"), exist_ok=True)
 
-call_py: PyTgCalls = PyTgCalls(app)
-loop = asyncio.get_event_loop()
+call_py: PyTgCalls | None = None
+loop: asyncio.AbstractEventLoop | None = None
 last_activity = time.time()
 stopping = threading.Event()
 
@@ -129,6 +131,7 @@ def stdin_loop() -> None:
             emit({"event": "error", "text": "missing cmd"})
             continue
         try:
+            assert loop is not None
             fut = asyncio.run_coroutine_threadsafe(handle(cmd), loop)
             fut.result(timeout=180)
         except Exception as e:  # noqa: BLE001
@@ -145,7 +148,11 @@ def idle_watch() -> None:
 
 
 async def main() -> None:
-    global last_activity
+    global call_py, loop, last_activity
+    loop = asyncio.get_running_loop()
+    # Constructed inside main() so its internal loop matches the running loop
+    # (avoids "attached to a different loop" errors in call_py.play()).
+    call_py = PyTgCalls(app)
     await call_py.start()
     me = await app.get_me()
     emit({"event": "ready", "username": me.username})
