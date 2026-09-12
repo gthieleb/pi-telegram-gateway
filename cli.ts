@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // cli.ts — daemon host for pi-telegram-gateway
 // Usage: node cli.js [--config <path>]
-import { writeFileSync } from "node:fs";
+
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { configPaths, loadConfig } from "./src/config.js";
 import { startGateway, type StartedGateway } from "./src/runtime.js";
@@ -40,8 +40,9 @@ async function main(): Promise<void> {
 
   const shutdown = (signal: string) => {
     console.log(`[gateway] ${signal} received, shutting down`);
+    // state.json (offset + laneSessions) is persisted by the runtime finally-block;
+    // writing here would drop the lane bindings.
     started.gateway.stop();
-    writeFileSync(paths.stateFile, JSON.stringify({ offset: started.gateway.offset }));
     setTimeout(() => process.exit(0), 500);
   };
   process.on("SIGTERM", () => shutdown("SIGTERM"));
