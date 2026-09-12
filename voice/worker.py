@@ -103,6 +103,35 @@ async def handle(cmd: dict) -> None:
                     emit({"event": "error", "chat": chat, "text": f"❌ {type(e).__name__}: {e}"})
                 else:
                     emit({"event": "error", "quiet": True, "text": str(e)})
+        elif kind == "check_user":
+            # Is a given user inside the group's active voice chat?
+            # Bots: GetFullChannel works; GetGroupCallParticipants may be user-only
+            # → emit supported=false on BOT_METHOD_INVALID (controller falls back).
+            chat = int(cmd.get("chat", 0))
+            user_id = int(cmd.get("user_id", 0))
+            try:
+                from pyrogram.raw import functions, types
+                peer = await app.resolve_peer(chat)
+                if isinstance(peer, types.InputPeerChannel):
+                    full = await app.invoke(functions.channels.GetFullChannel(channel=peer))
+                    call = full.full_chat.call
+                    if not call:
+                        emit({"event": "check", "in_call": False, "supported": True})
+                    else:
+                        participants = await app.invoke(
+                            functions.phone.GetGroupParticipants(call=call, ids=[], sources=[], offset="", limit=200)
+                        )
+                        in_call = any(
+                            getattr(p, "user_id", 0) == user_id or getattr(getattr(p, "peer", None), "user_id", 0) == user_id
+                            for p in participants.participants
+                        )
+                        emit({"event": "check", "in_call": bool(in_call), "supported": True})
+                else:
+                    emit({"event": "check", "in_call": False, "supported": False})
+            except Exception as e:  # noqa: BLE001
+                msg = str(e)
+                supported = "BOT_METHOD_INVALID" not in msg
+                emit({"event": "check", "in_call": False, "supported": supported, "error": msg[:120]})
         elif kind == "status":
             try:
                 seconds = await call_py.time(chat)
